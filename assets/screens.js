@@ -223,8 +223,10 @@ function screenCriteria(){
           (it.desc?'<div class="c-desc">'+esc(it.desc)+'</div>':'')+
           subsHTML+
           '<div class="c-meta"><span class="pill">Thang điểm '+it.scale+'</span>'+
-          it.evidence.map(e=>'<span class="pill">'+icon('file',11)+' '+esc(e)+'</span>').join('')+'</div>'+
+          it.evidence.map(e=>'<span class="pill">'+icon('file',11)+' '+esc(e)+'</span>').join('')+
+          '<span class="pill '+((it.localities||[]).length?'pill-green':'pill-red')+'" title="Số địa phương được gán chấm tiêu chí này (QL-TC-05)">'+icon('map',11)+' '+((it.localities||[]).length)+' địa phương</span></div>'+
           (canEdit?'<div class="crit-actions">'+
+            '<button class="icon-btn" title="Gán địa phương chấm tiêu chí này (QL-TC-05)" onclick="App.openAssignCritLoc(\''+it.id+'\')">'+icon('map',14)+'</button>'+
             '<button class="icon-btn" title="Sửa tiêu chí (QL-TC-02)" onclick="App.openEditCrit(\''+it.id+'\')">'+icon('edit',14)+'</button>'+
             '<button class="icon-btn" title="Quản lý chỉ số con (QL-TC-03)" onclick="App.openSubs(\''+it.id+'\')">'+icon('list',14)+'</button>'+
             '<button class="icon-btn danger" title="Xóa tiêu chí" onclick="App.deleteCrit(\''+it.id+'\')">'+icon('trash',14)+'</button>'+
@@ -252,7 +254,7 @@ function screenCriteria(){
   return pageHead('Quản lý tiêu chí thi đua','QL-TC-01 → 08 · Phân cấp: Nhóm tiêu chí → Tiêu chí → Chỉ số con',
     '<span class="tag-ver" style="align-self:center">'+icon('target',13)+' Phiên bản '+CRITERIA_VERSION+'</span>'+
     (canEdit?'<button class="btn" onclick="App.mockExportCriteria()">'+icon('export',15)+' Xuất Excel</button>'+
-      '<button class="btn" onclick="App.mockImportCriteria()">'+icon('upload',15)+' Nhập Excel</button>'+
+      '<button class="btn" onclick="App.openPublishCriteria()">'+icon('map',15)+' Ban hành cho ĐP</button>'+
       '<button class="btn btn-primary" onclick="App.openCreateGroup()">'+icon('plus',15)+' Tạo nhóm tiêu chí</button>':''))+
   '<div class="wsum'+(sum===100?'':' bad')+'">'+icon(sum===100?'check':'warn',17)+'<b>Tổng trọng số nhóm: '+fmt1(sum)+'%</b><div class="ws-bar"><i style="width:'+Math.min(sum,100)+'%"></i></div>'+
     '<span class="pill '+(sum===100?'pill-green':'pill-red')+'">'+(sum===100?'Hợp lệ — đủ 100%':'Chưa đủ 100% (QL-TC-01)')+'</span></div>'+
@@ -397,7 +399,7 @@ function workflowHint(d){
     DRAFT:{role:'diaphuong', txt:'Địa phương cần <b>đính kèm bằng chứng</b> cho các tiêu chí, tự đánh giá rồi nhấn <b>“Nộp hồ sơ”</b> (DU-01).'},
     REVISION_REQUESTED:{role:'diaphuong', txt:'Hồ sơ bị <b>yêu cầu chỉnh sửa</b>. Địa phương bổ sung bằng chứng theo ghi chú rồi <b>nộp lại hồ sơ</b>.'},
     SUBMITTED:{role:'chuyenvien', txt:'Chuyên viên <b>tiếp nhận và bắt đầu chấm điểm</b> (DU-02) — nhập điểm từng tiêu chí, tổng có trọng số tự tính.'},
-    IN_REVIEW:{role:'chuyenvien', txt:'Nhập đủ <b>'+ALL_CRITERIA().length+' điểm tiêu chí</b> và <b>nhận xét bắt buộc</b>, sau đó nhấn <b>“Gửi trưởng phòng”</b>. Có thể dùng nút điền điểm gợi ý.'},
+    IN_REVIEW:{role:'chuyenvien', txt:'Nhập đủ <b>'+applicableCriteria(d).length+' điểm tiêu chí được gán</b> và <b>nhận xét bắt buộc</b>, sau đó nhấn <b>“Gửi trưởng phòng”</b>. Có thể dùng nút điền điểm gợi ý.'},
     PENDING_APPROVAL:{role:'truongphong', txt:'Trưởng phòng xem lại kết quả chấm, <b>có thể điều chỉnh điểm từng tiêu chí</b>, rồi <b>“Duyệt & gửi Trung ương”</b> (DU-04) hoặc <b>“Hoàn trả”</b> kèm lý do (DU-06).'},
     SENT_TO_TW:{role:'tw', txt:'Trung ương nhấn <b>“Tiếp nhận xem xét”</b> để chuyển sang trạng thái TW đang xem xét.'},
     TW_REVIEWING:{role:'tw', txt:'Trung ương <b>so sánh điểm giữa các địa phương</b> (xem Báo cáo → Xếp hạng), có thể thêm <b>tiêu chí phụ ± điểm</b> (DU-05), sau đó <b>“Phê duyệt”</b> hoặc <b>“Yêu cầu chỉnh sửa”</b>.'},
@@ -453,15 +455,23 @@ function criteriaPanel(d){
   const canScore = ((r==='chuyenvien'||r==='admin') && s==='IN_REVIEW') || ((r==='truongphong'||r==='admin') && s==='PENDING_APPROVAL');
   const canComment = (r==='chuyenvien'||r==='admin') && s==='IN_REVIEW';
   const headAdjust = (r==='truongphong'||r==='admin') && s==='PENDING_APPROVAL';
+  const nApplic = applicableCriteria(d).length;
 
   let html = '<div class="card mb16" id="dossier-criteria"><div class="card-head"><div><h3 class="ct">Tiêu chí & bằng chứng</h3>'+
-    '<div class="cs">Bộ tiêu chí '+CRITERIA_VERSION+' · '+(canScore?(headAdjust?'Trưởng phòng có thể điều chỉnh điểm (bước 18)':'Nhập điểm 0–100 cho từng tiêu chí'):ALL_CRITERIA().length+' tiêu chí, '+CRITERIA_GROUPS.length+' nhóm')+'</div></div>'+
+    '<div class="cs">Bộ tiêu chí '+CRITERIA_VERSION+' · '+(canScore?(headAdjust?'Trưởng phòng có thể điều chỉnh điểm (bước 18)':'Nhập điểm 0–100 cho từng tiêu chí'):nApplic+' tiêu chí được gán cho địa phương (QL-TC-05)')+'</div></div>'+
     (canScore?'<button class="btn btn-sm ml-auto" style="align-self:flex-start" onclick="App.fillSampleScores(\''+d.id+'\')">'+icon('star',13)+' Điền điểm gợi ý</button>':'')+
     '</div><div class="card-pad" style="padding-top:12px">';
+  if(nApplic===0){
+    html += '<div class="hint" style="margin:4px 0 0"><span class="h-ic">'+icon('warn',17)+'</span><div class="h-txt">Địa phương này <b>chưa được gán tiêu chí thi đua</b> nào. Vào màn <b>Tiêu chí thi đua → nút “Gán ĐP”</b> trên từng tiêu chí (QL-TC-05) để chỉ định địa phương phải chấm.</div></div></div></div>';
+    return html;
+  }
 
+  const applicIds = applicableCriteria(d).map(c=>c.id);
   CRITERIA_GROUPS.forEach(g=>{
+    const items = g.items.filter(it=>applicIds.indexOf(it.id)>=0);
+    if(!items.length) return;
     html += '<div class="sec-title mt12">Nhóm '+g.id+' — '+esc(g.name)+' <span class="pill pill-gold" style="text-transform:none;letter-spacing:0">'+g.weight+'%</span></div>';
-    g.items.forEach(it=>{
+    items.forEach(it=>{
       const ev = d.evidence[it.id]||[];
       const sc = d.scores[it.id];
       const checked = d.selfCheck[it.id];
@@ -522,18 +532,24 @@ function bonusPanel(d){
 function scoreSummary(d){
   const total = weightedTotal(d);
   const bonusSum = d.bonus.reduce((a,b)=>a+b.points,0);
-  const nScored = Object.keys(d.scores).filter(k=>d.scores[k]&&d.scores[k].score!=null&&d.scores[k].score!=='').length;
+  const applic = applicableCriteria(d);
+  const applicIds = applic.map(c=>c.id);
+  const Wsum = applic.reduce((a,c)=>a+(Number(c.weight)||0),0) || 100;
+  const nApplic = applic.length;
+  const nScored = applicIds.filter(k=>d.scores[k]&&d.scores[k].score!=null&&d.scores[k].score!=='').length;
   const groups = CRITERIA_GROUPS.map(g=>{
+    const items = g.items.filter(it=>applicIds.indexOf(it.id)>=0);
+    if(!items.length) return '';
     let gs=0, gw=0, has=false;
-    g.items.forEach(it=>{ const sc=d.scores[it.id]; if(sc&&sc.score!=null&&sc.score!==''){ gs+=sc.score*it.weight/100; has=true;} gw+=it.weight; });
+    items.forEach(it=>{ const sc=d.scores[it.id]; if(sc&&sc.score!=null&&sc.score!==''){ gs+=sc.score*it.weight; has=true;} gw+=it.weight; });
     return '<div class="flex" style="justify-content:space-between;font-size:.83rem;padding:5px 0;border-bottom:1px dashed #F0EADF">'+
-      '<span>Nhóm '+g.id+' <span class="t-dim">('+gw+'%)</span></span><b class="mono">'+(has?fmt1(gs):'—')+'</b></div>';
+      '<span>Nhóm '+g.id+' <span class="t-dim">('+gw+'%)</span></span><b class="mono">'+(has?fmt1(gs/Wsum):'—')+'</b></div>';
   }).join('');
   return groups+
     '<div class="flex" style="justify-content:space-between;font-size:.83rem;padding:7px 0">'+
       '<span>Tiêu chí phụ (TW)</span><b class="mono" style="color:'+(bonusSum>=0?'var(--green)':'var(--red-strong)')+'">'+(bonusSum?(bonusSum>0?'+':'')+bonusSum:'0')+'</b></div>'+
     '<div class="total-box mt8"><span class="tb-num" id="live-total">'+(nScored?fmt1(total+bonusSum):'—')+'</span>'+
-      '<span class="t-dim">/ 100 điểm · <span id="live-scored">'+nScored+'</span>/'+ALL_CRITERIA().length+' tiêu chí đã chấm</span></div>'+
+      '<span class="t-dim">/ 100 điểm · <span id="live-scored">'+nScored+'</span>/'+nApplic+' tiêu chí đã chấm</span></div>'+
     (d.status==='PUBLISHED'?'<div class="pill pill-gold mt12">'+icon('medal',13)+' Đã công bố chính thức — hạng '+publishedRank(d)+' toàn đợt</div>':'');
 }
 

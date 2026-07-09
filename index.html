@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MTQ-ERP · Đánh giá Thi đua Địa phương</title>
+<title>Hệ thống phần mềm tích hợp  quản lý, giám sát và tương tác của Ủy ban MTTQ Việt Nam tỉnh thành phố Đồng nai
+</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -615,6 +616,10 @@ table.mx{border-collapse:separate;border-spacing:0;width:100%;font-size:.85rem;m
       </div>
       <span class="tb-cycle"><span class="dot"></span> Kỳ đánh giá: Năm 2026 · đang mở</span>
       <div class="tb-spacer"></div>
+      <button class="btn btn-sm btn-gold" id="btn-scenario" onclick="startScenario()" title="Chạy kịch bản demo từ đầu đến cuối theo luồng nghiệp vụ">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <span class="lbl">Kịch bản</span>
+      </button>
       <button class="btn btn-sm" id="btn-tour" onclick="startTour()" title="Xem hướng dẫn sử dụng từng bước">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>
         <span class="lbl">Hướng dẫn</span>
@@ -631,10 +636,11 @@ table.mx{border-collapse:separate;border-spacing:0;width:100%;font-size:.85rem;m
 <div id="toast-root" aria-live="polite"></div>
 
 <script src="assets/driver.js.iife.js"></script>
-<script src="assets/data.js?v=8"></script>
-<script src="assets/ui.js?v=8"></script>
-<script src="assets/screens.js?v=8"></script>
-<script src="assets/app.js?v=8"></script>
-<script src="assets/tour.js?v=8"></script>
+<script src="assets/data.js?v=9"></script>
+<script src="assets/ui.js?v=9"></script>
+<script src="assets/screens.js?v=9"></script>
+<script src="assets/app.js?v=9"></script>
+<script src="assets/tour.js?v=9"></script>
+<script src="assets/scenario.js?v=9"></script>
 </body>
 </html>

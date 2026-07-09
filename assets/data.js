@@ -191,6 +191,14 @@ function nextCritId(gid){ const g=findGroup(gid); let n=(g?g.items.length:0)+1; 
 function nextGroupId(){ let c=65; while(CRITERIA_GROUPS.some(g=>g.id===String.fromCharCode(c))) c++; return String.fromCharCode(c); }
 function groupItemsWeight(g){ return g.items.reduce((a,it)=>a+(Number(it.weight)||0),0); }
 
+/* danh sách id mọi xã/phường trong cây địa phương */
+function allXaIds(){ const out=[]; (function walk(ns){ ns.forEach(n=>{ if(n.level==='xa') out.push(n.id); if(n.children) walk(n.children); }); })(LOCALITIES); return out; }
+/* QL-TC-05: gán địa phương vào tiêu chí — seed mặc định: mọi tiêu chí áp dụng cho mọi xã hiện có */
+(function seedCritLocalities(){
+  const xa = allXaIds();
+  CRITERIA_GROUPS.forEach(g=>g.items.forEach(it=>{ if(!it.localities) it.localities = xa.slice(); }));
+})();
+
 /* ---------- Hồ sơ thi đua (kỳ Năm 2026) ---------- */
 /* Bằng chứng mẫu tái sử dụng */
 function EV(name, type){ return { name:name, type:type }; } // type: pdf | img | video | xls

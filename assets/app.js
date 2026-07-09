@@ -50,13 +50,33 @@ function visibleDossiers(){
   if(state.role==='truongphong') return all.filter(d=>d.dept==='pb1');
   return all;
 }
+/* QL-TC-05: tiêu chí áp dụng cho một địa phương (được gán) */
+function criteriaForLocality(locId){ return ALL_CRITERIA().filter(c => (c.localities||[]).indexOf(locId) >= 0); }
+function applicableCriteria(d){ return criteriaForLocality(typeof d==='string' ? d : d.locality); }
+/* tổng điểm có trọng số, tính trên các tiêu chí được gán cho địa phương (chuẩn hóa về thang 100) */
 function weightedTotal(d){
-  let t=0;
-  ALL_CRITERIA().forEach(it=>{
+  const crit = applicableCriteria(d);
+  const Wsum = crit.reduce((a,c)=>a+(Number(c.weight)||0),0) || 100;
+  let tRaw=0;
+  crit.forEach(it=>{
     const sc=d.scores[it.id];
-    if(sc && sc.score!=null && sc.score!=='') t += Number(sc.score)*it.weight/100;
+    if(sc && sc.score!=null && sc.score!=='') tRaw += Number(sc.score)*it.weight;
   });
-  return t;
+  return tRaw / Wsum;
+}
+/* đảm bảo địa phương có hồ sơ thi đua (tạo mới ở trạng thái nháp nếu chưa có) */
+function ensureDossier(locId){
+  let d = Store.dossiers.find(x=>x.locality===locId);
+  if(d) return d;
+  const loc = flatLocalities().find(x=>x.id===locId); if(!loc) return null;
+  const dept = DEPTS.find(p=>(p.localities||[]).indexOf(locId)>=0);
+  const seq = String(Store.dossiers.length+1).padStart(3,'0');
+  d = { id:'HS-2026-'+seq, locality:locId, localityName:loc.name, district:(loc.path?loc.path:''),
+        dept:dept?dept.id:'', status:'DRAFT', deadline:'15/07/2026', total:null, bonus:[],
+        selfCheck:{}, evidence:{}, scores:{}, reviewComment:'', rewardProposal:'',
+        history:[{ time:now(), actor:'Hệ thống', role:'Hệ thống', action:'Khởi tạo hồ sơ kỳ "Năm 2026"', status:'DRAFT', note:'Tự tạo khi gán tiêu chí cho địa phương' }] };
+  Store.dossiers.push(d);
+  return d;
 }
 function finalTotal(d){
   const bonus = d.bonus.reduce((a,b)=>a+b.points,0);
@@ -580,6 +600,48 @@ const App = {
     closeModal(); toast('Đã lưu <b>'+subs.length+' chỉ số con</b> cho tiêu chí '+cid,'ok'); renderScreen();
   },
 
+  /* ---- QL-TC-05: gán địa phương vào tiêu chí ---- */
+  openAssignCritLoc(cid){
+    const f=findCrit(cid); if(!f) return; const it=f.item;
+    const all=flatLocalities();
+    openModal('Gán địa phương chấm tiêu chí '+it.id+' (QL-TC-05)',
+      '<div class="t-dim mb12" style="font-size:.83rem"><b>'+esc(it.name)+'</b><br>Địa phương được tích chọn sẽ phải nộp bằng chứng &amp; được chấm theo tiêu chí này.</div>'+
+      '<div class="flex mb8" style="gap:8px"><button class="btn btn-sm" onclick="App.critLocAll(true)">Chọn tất cả</button><button class="btn btn-sm btn-ghost" onclick="App.critLocAll(false)">Bỏ chọn</button></div>'+
+      '<div class="loc-pick">'+all.map(l=>{
+        const on=(it.localities||[]).indexOf(l.id)>=0;
+        return '<label class="ev-check'+(on?' on':'')+'"><input type="checkbox" value="'+l.id+'"'+(on?' checked':'')+
+          ' onchange="this.closest(\'.ev-check\').classList.toggle(\'on\',this.checked)"> '+esc(l.name)+'</label>';
+      }).join('')+'</div>',
+      '<button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="App.saveAssignCritLoc(\''+cid+'\')">'+icon('check',14)+' Lưu phân công</button>');
+  },
+  critLocAll(on){ document.querySelectorAll('.loc-pick .ev-check').forEach(l=>{ const cb=l.querySelector('input'); cb.checked=on; l.classList.toggle('on',on); }); },
+  saveAssignCritLoc(cid){
+    const f=findCrit(cid); if(!f) return;
+    const ids=Array.from(document.querySelectorAll('.loc-pick input:checked')).map(i=>i.value);
+    f.item.localities = ids;
+    ids.forEach(lid=>ensureDossier(lid));
+    closeModal(); toast('Đã gán tiêu chí <b>'+cid+'</b> cho <b>'+ids.length+' địa phương</b> (QL-TC-05)','ok'); renderScreen();
+  },
+  /* ban hành toàn bộ bộ tiêu chí cho (các) địa phương — gán mọi tiêu chí cùng lúc */
+  openPublishCriteria(){
+    const all=flatLocalities();
+    openModal('Ban hành bộ tiêu chí cho địa phương (QL-TC-05)',
+      '<div class="t-dim mb12" style="font-size:.83rem">Chọn địa phương để áp dụng <b>toàn bộ bộ tiêu chí '+CRITERIA_VERSION+'</b>. Mỗi địa phương được chọn sẽ có hồ sơ thi đua để nộp &amp; chấm. <i>Thao tác này đặt lại phạm vi áp dụng cho tất cả tiêu chí.</i></div>'+
+      '<div class="flex mb8" style="gap:8px"><button class="btn btn-sm" onclick="App.critLocAll(true)">Chọn tất cả</button><button class="btn btn-sm btn-ghost" onclick="App.critLocAll(false)">Bỏ chọn</button></div>'+
+      '<div class="loc-pick">'+all.map(l=>{
+        const on=ALL_CRITERIA().length>0 && ALL_CRITERIA().every(c=>(c.localities||[]).indexOf(l.id)>=0);
+        return '<label class="ev-check'+(on?' on':'')+'"><input type="checkbox" value="'+l.id+'"'+(on?' checked':'')+
+          ' onchange="this.closest(\'.ev-check\').classList.toggle(\'on\',this.checked)"> '+esc(l.name)+'</label>';
+      }).join('')+'</div>',
+      '<button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="App.savePublishCriteria()">'+icon('check',14)+' Ban hành</button>');
+  },
+  savePublishCriteria(){
+    const ids=Array.from(document.querySelectorAll('.loc-pick input:checked')).map(i=>i.value);
+    CRITERIA_GROUPS.forEach(g=>g.items.forEach(c=>{ c.localities = ids.slice(); })); // dữ liệu gốc, không dùng bản sao ALL_CRITERIA()
+    ids.forEach(lid=>ensureDossier(lid));
+    closeModal(); toast('Đã ban hành bộ tiêu chí cho <b>'+ids.length+' địa phương</b> — hồ sơ thi đua đã sẵn sàng (QL-TC-05)','ok'); renderScreen();
+  },
+
   /* ---- nhập/xuất bộ tiêu chí (QL-TC-08) ---- */
   mockImportCriteria(){ toast('Đã nhập bộ tiêu chí từ <b>bo-tieu-chi-2026.xlsx</b> — '+CRITERIA_GROUPS.length+' nhóm, '+ALL_CRITERIA().length+' tiêu chí hợp lệ (QL-TC-08, demo)','ok'); },
   mockExportCriteria(){ toast('Đã kết xuất bộ tiêu chí ra <b>bo-tieu-chi-2026.xlsx</b> theo template chuẩn (QL-TC-08, demo)','ok'); },
@@ -609,16 +671,17 @@ const App = {
   quickFillEvidence(dId){
     const d = getDossier(dId);
     let added=0;
-    ALL_CRITERIA().forEach(it=>{
+    const slug=(d.localityName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')||'dp';
+    applicableCriteria(d).forEach(it=>{
       if(!(d.evidence[it.id]||[]).length){
         const type = it.evidence.includes('Hình ảnh')?'img':it.evidence.includes('Video')?'video':'pdf';
         const ext = type==='img'?'.jpg':type==='video'?'.mp4':'.pdf';
-        d.evidence[it.id]=[{name:'minh-chung-'+it.id.toLowerCase()+'-kimlien'+ext, type:type}];
+        d.evidence[it.id]=[{name:'minh-chung-'+it.id.toLowerCase()+'-'+slug+ext, type:type}];
         added++;
       }
       d.selfCheck[it.id]=1;
     });
-    toast(added?('Đã đính kèm nhanh <b>'+added+' tệp mẫu</b> và tự đánh giá đủ '+ALL_CRITERIA().length+' tiêu chí'):'Bộ hồ sơ đã đầy đủ bằng chứng','ok');
+    toast(added?('Đã đính kèm nhanh <b>'+added+' tệp mẫu</b> và tự đánh giá đủ '+applicableCriteria(d).length+' tiêu chí được gán'):'Bộ hồ sơ đã đầy đủ bằng chứng','ok');
     renderScreen();
   },
   toggleSelfCheck(dId, critId){
@@ -629,7 +692,8 @@ const App = {
     const d = getDossier(dId);
     const ev = Object.values(d.evidence).reduce((a,b)=>a+b.length,0);
     const sc = Object.keys(d.selfCheck).length;
-    const N = ALL_CRITERIA().length;
+    const N = applicableCriteria(d).length;
+    if(N === 0){ toast('Địa phương <b>chưa được gán tiêu chí thi đua</b> nào — vào màn Tiêu chí → “Gán địa phương” (QL-TC-05) trước khi nộp.','warn'); return; }
     const need = Math.min(5, N);
     if(ev < need){
       toast('Hồ sơ chưa đủ điều kiện nộp: cần bằng chứng cho ít nhất <b>'+need+'</b> tiêu chí (hiện có '+ev+' tệp). Dùng nút "Đính kèm nhanh bộ mẫu". <i>Tự đánh giá là tùy chọn.</i>','warn');
@@ -664,15 +728,15 @@ const App = {
   fillSampleScores(dId){
     const d = getDossier(dId);
     const sample = {A1:86, A2:84, B1:88, B2:81, B3:90, C1:85, C2:83, D1:87, D2:84};
-    ALL_CRITERIA().forEach(it=>{ const v=sample[it.id]!=null?sample[it.id]:85; d.scores[it.id]=Object.assign(d.scores[it.id]||{note:''},{score:v}); });
+    applicableCriteria(d).forEach(it=>{ const v=sample[it.id]!=null?sample[it.id]:85; d.scores[it.id]=Object.assign(d.scores[it.id]||{note:''},{score:v}); });
     if(!d.reviewComment) d.reviewComment='Hồ sơ đầy đủ, bằng chứng thuyết phục. Quê hương Chủ tịch Hồ Chí Minh duy trì phong trào tốt, nổi bật ở Quỹ "Vì người nghèo" và xây dựng nông thôn mới kiểu mẫu.';
     toast('Đã điền bộ điểm gợi ý và nhận xét mẫu — bạn có thể chỉnh lại từng ô','ok');
     renderScreen();
   },
   sendToHead(dId){
     const d = getDossier(dId);
-    const missing = ALL_CRITERIA().filter(it=>!(d.scores[it.id]&&d.scores[it.id].score!=null)).map(it=>it.id);
-    if(missing.length){ toast('Chưa chấm đủ '+ALL_CRITERIA().length+' tiêu chí — còn thiếu: <b>'+missing.join(', ')+'</b>','warn'); return; }
+    const missing = applicableCriteria(d).filter(it=>!(d.scores[it.id]&&d.scores[it.id].score!=null)).map(it=>it.id);
+    if(missing.length){ toast('Chưa chấm đủ '+applicableCriteria(d).length+' tiêu chí — còn thiếu: <b>'+missing.join(', ')+'</b>','warn'); return; }
     if(!d.reviewComment.trim()){ toast('Vui lòng nhập <b>nhận xét tổng hợp</b> (bắt buộc) trước khi gửi','warn'); return; }
     d.total = round1(weightedTotal(d));
     d.status='PENDING_APPROVAL';
