@@ -191,12 +191,15 @@ function nextCritId(gid){ const g=findGroup(gid); let n=(g?g.items.length:0)+1; 
 function nextGroupId(){ let c=65; while(CRITERIA_GROUPS.some(g=>g.id===String.fromCharCode(c))) c++; return String.fromCharCode(c); }
 function groupItemsWeight(g){ return g.items.reduce((a,it)=>a+(Number(it.weight)||0),0); }
 
-/* danh sách id mọi xã/phường trong cây địa phương */
-function allXaIds(){ const out=[]; (function walk(ns){ ns.forEach(n=>{ if(n.level==='xa') out.push(n.id); if(n.children) walk(n.children); }); })(LOCALITIES); return out; }
-/* QL-TC-05: gán địa phương vào tiêu chí — seed mặc định: mọi tiêu chí áp dụng cho mọi xã hiện có */
-(function seedCritLocalities(){
-  const xa = allXaIds();
-  CRITERIA_GROUPS.forEach(g=>g.items.forEach(it=>{ if(!it.localities) it.localities = xa.slice(); }));
+/* danh sách id mọi tiêu chí (theo thứ tự định nghĩa) */
+function allCriteriaIds(){ const out=[]; CRITERIA_GROUPS.forEach(g=>g.items.forEach(it=>out.push(it.id))); return out; }
+/* QL-DP-04: địa phương là chủ thể — mỗi xã có bộ tiêu chí riêng (node.criteria).
+   Seed mặc định: mỗi xã chỉ được gán sẵn ~MỘT NỬA bộ tiêu chí (các nhóm đầu),
+   phần còn lại để người dùng tự "Thêm tiêu chí" cho địa phương. */
+(function seedLocalityCriteria(){
+  const ids = allCriteriaIds();
+  const half = ids.slice(0, Math.ceil(ids.length/2)); // 9 tiêu chí → 5 tiêu chí đầu (nhóm A + B)
+  (function walk(ns){ ns.forEach(n=>{ if(n.level==='xa' && !n.criteria) n.criteria = half.slice(); if(n.children) walk(n.children); }); })(LOCALITIES);
 })();
 
 /* ---------- Hồ sơ thi đua (kỳ Năm 2026) ---------- */

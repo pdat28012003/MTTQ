@@ -160,8 +160,20 @@ function localityProfile(){
         info('Phòng ban quản lý (QL-DP-05)', deptLabel)+
         info('Hồ sơ kỳ này', d? d.id : 'Chưa khởi tạo')+'</div>'+
       '<div><div class="d-sec">Tiêu chí được gán (QL-DP-04)</div>'+
-        '<div class="mb8"><span class="tag-ver">'+icon('target',13)+' Bộ tiêu chí '+CRITERIA_VERSION+'</span></div>'+
-        '<div class="t-dim" style="line-height:1.7">'+CRITERIA_GROUPS.length+' nhóm · '+ALL_CRITERIA().length+' tiêu chí · tổng trọng số '+fmt1(CRITERIA_GROUPS.reduce((a,g)=>a+g.weight,0))+'%<br>Áp dụng chung toàn quốc, kỳ "Năm 2026"</div>'+
+        (function(){
+          const crit = criteriaForLocality(n.id);
+          const canAssign = ['admin','tw'].includes(state.role);
+          const wsum = crit.reduce((a,c)=>a+c.weight,0);
+          let h = '<div class="mb8"><span class="tag-ver">'+icon('target',13)+' Bộ tiêu chí '+CRITERIA_VERSION+'</span></div>';
+          if(crit.length){
+            h += '<div class="chips mb8">'+crit.map(c=>'<span class="chip" title="'+esc(c.name)+'"><b>'+c.id+'</b> '+c.weight+'%'+(canAssign?'<button class="cx" title="Bỏ tiêu chí" onclick="App.removeLocCriterion(\''+n.id+'\',\''+c.id+'\',false)">✕</button>':'')+'</span>').join('')+'</div>'+
+                 '<div class="t-dim" style="font-size:.8rem">'+crit.length+' tiêu chí · tổng trọng số '+fmt1(wsum)+'%'+(wsum!==100?' <span style="color:#C0392B">(≠100%)</span>':'')+'</div>';
+          } else {
+            h += '<div class="hint" style="margin:0 0 8px"><span class="h-ic">'+icon('warn',16)+'</span><div class="h-txt" style="font-size:.82rem">Địa phương <b>chưa được gán tiêu chí</b> nào. Hãy thêm tiêu chí để tạo hồ sơ chấm thi đua.</div></div>';
+          }
+          if(canAssign) h += '<button class="btn btn-sm btn-primary" onclick="App.openAddLocCriteria(\''+n.id+'\')">'+icon('plus',13)+' Thêm tiêu chí</button>';
+          return h;
+        })()+
         '<div class="d-sec">Xu hướng điểm (QL-DP-06)</div>'+sparkline(cur!=null?hist.concat([cur]):hist)+'</div>'+
     '</div>'+
     '<div class="d-sec">Lịch sử điểm qua các kỳ</div>'+
@@ -223,10 +235,8 @@ function screenCriteria(){
           (it.desc?'<div class="c-desc">'+esc(it.desc)+'</div>':'')+
           subsHTML+
           '<div class="c-meta"><span class="pill">Thang điểm '+it.scale+'</span>'+
-          it.evidence.map(e=>'<span class="pill">'+icon('file',11)+' '+esc(e)+'</span>').join('')+
-          '<span class="pill '+((it.localities||[]).length?'pill-green':'pill-red')+'" title="Số địa phương được gán chấm tiêu chí này (QL-TC-05)">'+icon('map',11)+' '+((it.localities||[]).length)+' địa phương</span></div>'+
+          it.evidence.map(e=>'<span class="pill">'+icon('file',11)+' '+esc(e)+'</span>').join('')+'</div>'+
           (canEdit?'<div class="crit-actions">'+
-            '<button class="icon-btn" title="Gán địa phương chấm tiêu chí này (QL-TC-05)" onclick="App.openAssignCritLoc(\''+it.id+'\')">'+icon('map',14)+'</button>'+
             '<button class="icon-btn" title="Sửa tiêu chí (QL-TC-02)" onclick="App.openEditCrit(\''+it.id+'\')">'+icon('edit',14)+'</button>'+
             '<button class="icon-btn" title="Quản lý chỉ số con (QL-TC-03)" onclick="App.openSubs(\''+it.id+'\')">'+icon('list',14)+'</button>'+
             '<button class="icon-btn danger" title="Xóa tiêu chí" onclick="App.deleteCrit(\''+it.id+'\')">'+icon('trash',14)+'</button>'+
@@ -254,7 +264,7 @@ function screenCriteria(){
   return pageHead('Quản lý tiêu chí thi đua','QL-TC-01 → 08 · Phân cấp: Nhóm tiêu chí → Tiêu chí → Chỉ số con',
     '<span class="tag-ver" style="align-self:center">'+icon('target',13)+' Phiên bản '+CRITERIA_VERSION+'</span>'+
     (canEdit?'<button class="btn" onclick="App.mockExportCriteria()">'+icon('export',15)+' Xuất Excel</button>'+
-      '<button class="btn" onclick="App.openPublishCriteria()">'+icon('map',15)+' Ban hành cho ĐP</button>'+
+      '<button class="btn" onclick="App.nav(\'diaphuong\')">'+icon('map',15)+' Gán cho địa phương</button>'+
       '<button class="btn btn-primary" onclick="App.openCreateGroup()">'+icon('plus',15)+' Tạo nhóm tiêu chí</button>':''))+
   '<div class="wsum'+(sum===100?'':' bad')+'">'+icon(sum===100?'check':'warn',17)+'<b>Tổng trọng số nhóm: '+fmt1(sum)+'%</b><div class="ws-bar"><i style="width:'+Math.min(sum,100)+'%"></i></div>'+
     '<span class="pill '+(sum===100?'pill-green':'pill-red')+'">'+(sum===100?'Hợp lệ — đủ 100%':'Chưa đủ 100% (QL-TC-01)')+'</span></div>'+
@@ -457,12 +467,15 @@ function criteriaPanel(d){
   const headAdjust = (r==='truongphong'||r==='admin') && s==='PENDING_APPROVAL';
   const nApplic = applicableCriteria(d).length;
 
+  const canAssignHere = ['admin','tw'].includes(r) || canScore;
   let html = '<div class="card mb16" id="dossier-criteria"><div class="card-head"><div><h3 class="ct">Tiêu chí & bằng chứng</h3>'+
-    '<div class="cs">Bộ tiêu chí '+CRITERIA_VERSION+' · '+(canScore?(headAdjust?'Trưởng phòng có thể điều chỉnh điểm (bước 18)':'Nhập điểm 0–100 cho từng tiêu chí'):nApplic+' tiêu chí được gán cho địa phương (QL-TC-05)')+'</div></div>'+
-    (canScore?'<button class="btn btn-sm ml-auto" style="align-self:flex-start" onclick="App.fillSampleScores(\''+d.id+'\')">'+icon('star',13)+' Điền điểm gợi ý</button>':'')+
+    '<div class="cs">Bộ tiêu chí '+CRITERIA_VERSION+' · '+(canScore?(headAdjust?'Trưởng phòng có thể điều chỉnh điểm (bước 18)':'Nhập điểm 0–100 cho từng tiêu chí'):nApplic+' tiêu chí được gán cho địa phương (QL-DP-04)')+'</div></div>'+
+    (canScore?'<div class="flex ml-auto" style="gap:6px;align-self:flex-start"><button class="btn btn-sm btn-ghost" onclick="App.addCriteriaWhileScoring(\''+d.id+'\')" title="Bổ sung tiêu chí cho địa phương trong lúc chấm">'+icon('plus',13)+' Bổ sung tiêu chí</button><button class="btn btn-sm" onclick="App.fillSampleScores(\''+d.id+'\')">'+icon('star',13)+' Điền điểm gợi ý</button></div>':'')+
     '</div><div class="card-pad" style="padding-top:12px">';
   if(nApplic===0){
-    html += '<div class="hint" style="margin:4px 0 0"><span class="h-ic">'+icon('warn',17)+'</span><div class="h-txt">Địa phương này <b>chưa được gán tiêu chí thi đua</b> nào. Vào màn <b>Tiêu chí thi đua → nút “Gán ĐP”</b> trên từng tiêu chí (QL-TC-05) để chỉ định địa phương phải chấm.</div></div></div></div>';
+    html += '<div class="hint" style="margin:4px 0 0"><span class="h-ic">'+icon('warn',17)+'</span><div class="h-txt">Địa phương này <b>chưa được gán tiêu chí thi đua</b> nào. Vào màn <b>Quản lý địa phương → chọn xã → “Gán tiêu chí”</b> (QL-DP-04) để chỉ định bộ tiêu chí địa phương phải chấm.'+
+      (canAssignHere?' ':'')+'</div>'+
+      (canAssignHere?'<button class="btn btn-sm btn-gold" onclick="App.openAddLocCriteria(\''+d.locality+'\',true)">'+icon('plus',13)+' Thêm tiêu chí ngay</button>':'')+'</div></div></div>';
     return html;
   }
 

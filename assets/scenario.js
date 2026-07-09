@@ -1,7 +1,7 @@
 /* =====================================================================
-   scenario.js — KỊCH BẢN DEMO chạy từ đầu đến cuối theo luồng nghiệp vụ
-   Màn 1: Thiết lập (mở form thật: phòng ban → địa phương → gán vào phòng ban
-          → người dùng → tiêu chí → gán/ban hành tiêu chí cho địa phương).
+   scenario.js — KỊCH BẢN DEMO chạy từ đầu đến cuối theo luồng nghiệp vụ mới
+   Màn 1: Thiết lập (mở form thật: phòng ban → địa phương → gán ĐP vào phòng ban
+          → người dùng → TẠO tiêu chí → THÊM tiêu chí cho địa phương QL-DP-04).
    Màn 2: Vòng đời hồ sơ (tự chạy HS-2026-001 qua 5 cấp đến công bố).
    ===================================================================== */
 (function(){
@@ -72,10 +72,10 @@
         onHighlightStarted:function(){ closeOverlays(); App.openCreateCrit('A'); },
         popover:{ title:'⑤ Tạo tiêu chí: trọng số, thang điểm (QL-TC-02)',
           description:'Xây <b>bộ tiêu chí</b>: tên, <b>trọng số %</b>, <b>thang điểm</b> (0–10/0–100), loại bằng chứng. Có thể thêm chỉ số con (QL-TC-03). Tổng trọng số các nhóm = 100%.', side:'left', align:'start' } },
-      { hash:'#/tieuchi', element:'.m-box',
-        onHighlightStarted:function(){ closeOverlays(); App.openPublishCriteria(); },
-        popover:{ title:'⑥ Gán / ban hành tiêu chí cho địa phương (QL-TC-05)',
-          description:'<b>Bước then chốt:</b> gán địa phương vào tiêu chí. Địa phương được gán tiêu chí nào thì <b>phải nộp &amp; được chấm</b> tiêu chí đó — và hệ thống <b>tự tạo hồ sơ thi đua</b> cho địa phương đó. (Cũng có nút “Gán ĐP” trên từng tiêu chí để phân công chi tiết.)', side:'left', align:'start' } },
+      { hash:'#/diaphuong', element:'.m-box',
+        onHighlightStarted:function(){ closeOverlays(); ui.treeSel='kimlien'; App.openAddLocCriteria('kimlien'); },
+        popover:{ title:'⑥ Thêm tiêu chí cho địa phương (QL-DP-04)',
+          description:'<b>Bước then chốt:</b> địa phương là <b>chủ thể</b> được gán tiêu chí. Vào màn Địa phương → chọn xã → nhấn <b>“Thêm tiêu chí”</b> → hiện danh sách tiêu chí đã tạo → tích chọn → <b>Thêm</b>. <b>Mỗi địa phương có thể có bộ tiêu chí khác nhau</b>; địa phương có tiêu chí nào thì phải nộp &amp; được chấm tiêu chí đó. Khi đang chấm vẫn có thể <b>bổ sung tiêu chí</b>.', side:'left', align:'start' } },
 
       /* ---------- MÀN 2: VÒNG ĐỜI HỒ SƠ (tự chạy) ---------- */
       { hash:'#/hoso/'+D, element:'#dossier-criteria',

@@ -50,8 +50,9 @@ function visibleDossiers(){
   if(state.role==='truongphong') return all.filter(d=>d.dept==='pb1');
   return all;
 }
-/* QL-TC-05: tiêu chí áp dụng cho một địa phương (được gán) */
-function criteriaForLocality(locId){ return ALL_CRITERIA().filter(c => (c.localities||[]).indexOf(locId) >= 0); }
+/* QL-DP-04: địa phương là chủ thể — trả về các tiêu chí đã gán cho địa phương (theo thứ tự bộ tiêu chí) */
+function localityNode(locId){ const f=findLocality(locId); return f?f.node:null; }
+function criteriaForLocality(locId){ const n=localityNode(locId); const set=(n&&n.criteria)||[]; return ALL_CRITERIA().filter(c => set.indexOf(c.id) >= 0); }
 function applicableCriteria(d){ return criteriaForLocality(typeof d==='string' ? d : d.locality); }
 /* tổng điểm có trọng số, tính trên các tiêu chí được gán cho địa phương (chuẩn hóa về thang 100) */
 function weightedTotal(d){
@@ -600,47 +601,50 @@ const App = {
     closeModal(); toast('Đã lưu <b>'+subs.length+' chỉ số con</b> cho tiêu chí '+cid,'ok'); renderScreen();
   },
 
-  /* ---- QL-TC-05: gán địa phương vào tiêu chí ---- */
-  openAssignCritLoc(cid){
-    const f=findCrit(cid); if(!f) return; const it=f.item;
-    const all=flatLocalities();
-    openModal('Gán địa phương chấm tiêu chí '+it.id+' (QL-TC-05)',
-      '<div class="t-dim mb12" style="font-size:.83rem"><b>'+esc(it.name)+'</b><br>Địa phương được tích chọn sẽ phải nộp bằng chứng &amp; được chấm theo tiêu chí này.</div>'+
-      '<div class="flex mb8" style="gap:8px"><button class="btn btn-sm" onclick="App.critLocAll(true)">Chọn tất cả</button><button class="btn btn-sm btn-ghost" onclick="App.critLocAll(false)">Bỏ chọn</button></div>'+
-      '<div class="loc-pick">'+all.map(l=>{
-        const on=(it.localities||[]).indexOf(l.id)>=0;
-        return '<label class="ev-check'+(on?' on':'')+'"><input type="checkbox" value="'+l.id+'"'+(on?' checked':'')+
-          ' onchange="this.closest(\'.ev-check\').classList.toggle(\'on\',this.checked)"> '+esc(l.name)+'</label>';
-      }).join('')+'</div>',
-      '<button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="App.saveAssignCritLoc(\''+cid+'\')">'+icon('check',14)+' Lưu phân công</button>');
+  /* ---- QL-DP-04: THÊM tiêu chí cho địa phương (địa phương là chủ thể) ---- */
+  openAddLocCriteria(locId, fromDossier){
+    const n=localityNode(locId); if(!n) return;
+    const cur=(n.criteria||[]);
+    const avail=ALL_CRITERIA().filter(c=>cur.indexOf(c.id)<0);
+    let body='<div class="t-dim mb12" style="font-size:.83rem">Chọn tiêu chí (đã tạo ở <b>Quản lý tiêu chí</b>) để thêm cho <b>'+esc(n.name)+'</b>. Địa phương sẽ phải nộp bằng chứng &amp; được chấm theo các tiêu chí này. Mỗi địa phương có thể có bộ tiêu chí khác nhau.</div>';
+    if(cur.length){
+      body+='<div class="mb12"><div class="t-dim" style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Đã gán ('+cur.length+')</div><div class="chips">'+
+        cur.map(id=>{ const c=ALL_CRITERIA().find(x=>x.id===id); return '<span class="chip"><b>'+id+'</b>'+(c?' '+esc(c.name.slice(0,20)):'')+'<button class="cx" title="Bỏ tiêu chí" onclick="App.removeLocCriterion(\''+locId+'\',\''+id+'\','+(fromDossier?'true':'false')+')">✕</button></span>'; }).join('')+'</div></div>';
+    }
+    if(!avail.length){
+      body+='<div class="hint" style="margin:0"><span class="h-ic">'+icon('check',16)+'</span><div class="h-txt">Đã thêm tất cả tiêu chí hiện có. Muốn thêm mới, hãy tạo tiêu chí ở màn <b>Quản lý tiêu chí</b>.</div></div>';
+      openModal('Thêm tiêu chí cho '+esc(n.name)+' (QL-DP-04)', body, '<button class="btn" onclick="closeModal()">Đóng</button>'); return;
+    }
+    body+='<div class="t-dim" style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Tiêu chí có thể thêm — tích chọn</div>'+
+      '<div class="loc-pick" style="flex-direction:column;gap:3px;align-items:stretch">';
+    CRITERIA_GROUPS.forEach(g=>{
+      const items=g.items.filter(it=>cur.indexOf(it.id)<0);
+      if(!items.length) return;
+      body+='<div class="t-dim" style="font-size:.72rem;font-weight:700;margin:5px 0 1px">Nhóm '+g.id+' — '+esc(g.name)+'</div>';
+      items.forEach(it=>{ body+='<label class="ev-check" style="justify-content:flex-start"><input type="checkbox" value="'+it.id+'" onchange="this.closest(\'.ev-check\').classList.toggle(\'on\',this.checked)"> <b>'+it.id+'</b> · '+esc(it.name)+' <span class="t-dim">('+it.weight+'% · thang '+it.scale+')</span></label>'; });
+    });
+    body+='</div>';
+    openModal('Thêm tiêu chí cho '+esc(n.name)+' (QL-DP-04)', body,
+      '<button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="App.saveAddLocCriteria(\''+locId+'\','+(fromDossier?'true':'false')+')">'+icon('plus',14)+' Thêm tiêu chí</button>');
   },
-  critLocAll(on){ document.querySelectorAll('.loc-pick .ev-check').forEach(l=>{ const cb=l.querySelector('input'); cb.checked=on; l.classList.toggle('on',on); }); },
-  saveAssignCritLoc(cid){
-    const f=findCrit(cid); if(!f) return;
+  saveAddLocCriteria(locId, fromDossier){
+    const n=localityNode(locId); if(!n) return;
     const ids=Array.from(document.querySelectorAll('.loc-pick input:checked')).map(i=>i.value);
-    f.item.localities = ids;
-    ids.forEach(lid=>ensureDossier(lid));
-    closeModal(); toast('Đã gán tiêu chí <b>'+cid+'</b> cho <b>'+ids.length+' địa phương</b> (QL-TC-05)','ok'); renderScreen();
+    if(!ids.length){ toast('Chưa chọn tiêu chí nào để thêm','warn'); return; }
+    n.criteria=(n.criteria||[]).concat(ids.filter(id=>(n.criteria||[]).indexOf(id)<0));
+    ensureDossier(locId);
+    closeModal(); toast('Đã thêm <b>'+ids.length+' tiêu chí</b> cho <b>'+esc(n.name)+'</b> (QL-DP-04)','ok');
+    if(fromDossier) renderAll(); else renderScreen();
   },
-  /* ban hành toàn bộ bộ tiêu chí cho (các) địa phương — gán mọi tiêu chí cùng lúc */
-  openPublishCriteria(){
-    const all=flatLocalities();
-    openModal('Ban hành bộ tiêu chí cho địa phương (QL-TC-05)',
-      '<div class="t-dim mb12" style="font-size:.83rem">Chọn địa phương để áp dụng <b>toàn bộ bộ tiêu chí '+CRITERIA_VERSION+'</b>. Mỗi địa phương được chọn sẽ có hồ sơ thi đua để nộp &amp; chấm. <i>Thao tác này đặt lại phạm vi áp dụng cho tất cả tiêu chí.</i></div>'+
-      '<div class="flex mb8" style="gap:8px"><button class="btn btn-sm" onclick="App.critLocAll(true)">Chọn tất cả</button><button class="btn btn-sm btn-ghost" onclick="App.critLocAll(false)">Bỏ chọn</button></div>'+
-      '<div class="loc-pick">'+all.map(l=>{
-        const on=ALL_CRITERIA().length>0 && ALL_CRITERIA().every(c=>(c.localities||[]).indexOf(l.id)>=0);
-        return '<label class="ev-check'+(on?' on':'')+'"><input type="checkbox" value="'+l.id+'"'+(on?' checked':'')+
-          ' onchange="this.closest(\'.ev-check\').classList.toggle(\'on\',this.checked)"> '+esc(l.name)+'</label>';
-      }).join('')+'</div>',
-      '<button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="App.savePublishCriteria()">'+icon('check',14)+' Ban hành</button>');
+  removeLocCriterion(locId, cid, fromDossier){
+    const n=localityNode(locId); if(!n) return;
+    n.criteria=(n.criteria||[]).filter(x=>x!==cid);
+    toast('Đã bỏ tiêu chí <b>'+cid+'</b> khỏi <b>'+esc(n.name)+'</b>','warn');
+    if(fromDossier) renderAll(); else renderScreen();
+    App.openAddLocCriteria(locId, fromDossier);
   },
-  savePublishCriteria(){
-    const ids=Array.from(document.querySelectorAll('.loc-pick input:checked')).map(i=>i.value);
-    CRITERIA_GROUPS.forEach(g=>g.items.forEach(c=>{ c.localities = ids.slice(); })); // dữ liệu gốc, không dùng bản sao ALL_CRITERIA()
-    ids.forEach(lid=>ensureDossier(lid));
-    closeModal(); toast('Đã ban hành bộ tiêu chí cho <b>'+ids.length+' địa phương</b> — hồ sơ thi đua đã sẵn sàng (QL-TC-05)','ok'); renderScreen();
-  },
+  /* bổ sung tiêu chí cho địa phương ngay trong lúc chấm */
+  addCriteriaWhileScoring(dId){ const d=getDossier(dId); App.openAddLocCriteria(d.locality, true); },
 
   /* ---- nhập/xuất bộ tiêu chí (QL-TC-08) ---- */
   mockImportCriteria(){ toast('Đã nhập bộ tiêu chí từ <b>bo-tieu-chi-2026.xlsx</b> — '+CRITERIA_GROUPS.length+' nhóm, '+ALL_CRITERIA().length+' tiêu chí hợp lệ (QL-TC-08, demo)','ok'); },
